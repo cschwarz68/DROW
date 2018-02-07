@@ -1,7 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
 df = pd.read_csv('H:\Test1LeftRange(400-600)\File_ID_59324053.csv',
                  error_bad_lines=False)
 

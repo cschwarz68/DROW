@@ -33,7 +33,8 @@ for filename in filenames:
                'right_marker_probability_%miss',
                'left_line_right_distance_%miss',
                'right_line_left_distance_%miss',
-               'lane_distance_off_center_%miss', 'lane_width_%miss']
+               'lane_distance_off_center_%miss',
+               'lane_width_%miss']
     f = pd.DataFrame(rows, columns=columns)
     f_list.append(f)
 

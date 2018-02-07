@@ -29,8 +29,8 @@ for filename in filenames:
     df_id = pd.DataFrame([[int(file_id)]], columns=['file_id'])
     f_list.append(df_id)
 
-    # Create the new dataframe with camera confidence metrics
-    # for each trip in the dataset
+    # Create the new dataframe with camera confidence metrics for each
+    # trip in the dataset
     for col in df:
         if col == ('vtti.left_marker_probability'):
             column = df[col]

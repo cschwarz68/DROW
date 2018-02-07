@@ -3,7 +3,7 @@ import pandas as pd
 import glob
 
 filenames = glob.glob("Y:\TimeseriesExport\*.csv")
-# filenames = ['Y:\TimeseriesExport\File_ID_821377.csv']  #run for a single fie
+# filenames = ['Y:\TimeseriesExport\File_ID_821377.csv']
 
 
 def main():

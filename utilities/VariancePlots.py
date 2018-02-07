@@ -5,7 +5,7 @@ path = r'C:\TimeSeriesExport'
 filenames = glob.glob(path + "\*.csv")
 file_list = []
 
-# concatenate the entire dataset, dropping nAn values
+# concatenate the entire dataset, dropping NaN values
 for f in filenames:
     df = pd.read_csv(f, usecols=['vtti.left_marker_probability',
                                  'vtti.right_marker_probability',

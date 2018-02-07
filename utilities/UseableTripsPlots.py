@@ -8,7 +8,6 @@ objects = ['lane_width', 'left_line_right_distance', 'left_marker_probability',
 
 y_pos = np.arange(len(objects))
 
-
 plt.bar(y_pos, y, align='center')
 plt.xticks(y_pos, objects, rotation=45)
 plt.ylabel('Trip Count')
