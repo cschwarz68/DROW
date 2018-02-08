@@ -33,8 +33,7 @@ def processfiles():
         path, filename = os.path.split(path)
         filename, file_extension = os.path.splitext(filename)
 
-        ordname = os.path.join(os.getenv('SHRP2ProcessedII'),
-                               filename + '.csv')
+        ordname = os.path.join(os.getenv('SHRP2ProcessedII'), filename+'.csv')
         if os.path.isfile(ordname):
             print('ORD file exists for file ' + filename)
             continue
@@ -44,3 +43,4 @@ def processfiles():
 
 if __name__ == '__main__':
     processfiles()
+    

@@ -19,9 +19,8 @@ for f in filenames:
             'vtti.left_line_right_distance',
             'vtti.right_line_left_distance']] = np.nan
 
-    # fill segments with less than 1 second of consecutive nan's
-    # with linear interpolates
-
+    # fill segments with less than 1 second of consecutive nan's with
+    # linear interpolates
     df['vtti.lane_distance_off_center'].interpolate(method='linear', limit=10)
     df['vtti.left_line_right_distance'].interpolate(method='linear', limit=10)
     df['vtti.right_line_left_distance'].interpolate(method='linear', limit=10)

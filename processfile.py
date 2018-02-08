@@ -11,8 +11,12 @@ FS = 10
 FS_TIMESTAMP = 1000
 LATOFFSET = 2
 INTERPLIM = 10
-PREVIEW_SECONDS = 240
+PREVIEW_SECONDS = 300
 LANEPROBLIM = 800
+LANEWIDTH = 365.76
+CARWIDTH = 182.88
+LANECENTER = 15.0
+
 MAKEPLOTS = True
 WRITEFILE = True
 
@@ -20,7 +24,6 @@ WRITEFILE = True
 def process(fullfile, df_ord):
     '''
     Read a 10 hz file
-
     Returns:
     A processed data frame from the trip
     '''
@@ -86,6 +89,9 @@ def process(fullfile, df_ord):
         print('read_csv failed on: ' + fullfile)
         return
 
+    # capture the starting timestamp
+    start_timestamp = df['timestamp'][0]
+
     # drop lane data when probabilities are low
     isLowProb = df.loc[:, 'leftprob'] + df.loc[:, 'rightprob'] < LANEPROBLIM
     df.loc[isLowProb, 'lanepos'] = np.nan
@@ -116,7 +122,8 @@ def process(fullfile, df_ord):
         return
 
     if MAKEPLOTS:
-        F = plt.figure()
+        F = plt.figure(1)
+        plt.hold()
         plt.subplot(321)
         plt.plot(df.timestamp, df.lanepos)
         plt.title('lanepos')
@@ -139,15 +146,35 @@ def process(fullfile, df_ord):
         plt.pause(1)
         plt.savefig(os.path.join('laneplots', filename + '.png'))
 
-    if MAKEPLOTS:
-        plt.close('all')
-
     # find headway and range rate for lead vehicle
     # remove the processed track columns
     df = process_radar(df, filename)
 
+    isLaneDepartLeft = df['lanepos'] < -(LANEWIDTH/2.0-CARWIDTH/2.0)
+    isLaneDepartRight = df['lanepos'] > (LANEWIDTH/2.0-CARWIDTH/2.0)
+    isLaneDepart = np.logical_or(isLaneDepartLeft, isLaneDepartRight)
+    isLaneChange = np.full_like(isLaneDepart, False, dtype=bool)
+    le, te = find_edges(isLaneDepart)
+    for i in range(len(le)):
+        if np.logical_xor(isLaneDepartLeft[le[i]], isLaneDepartLeft[te[i]-1]):
+            # lane change!
+            start = np.where(abs(df.lanepos[:le[i]]) <= LANECENTER)[0]
+            if len(start) > 0:
+                idx_start = start[-1]
+            else:
+                idx_start = le[i]
+            end = np.where(abs(df.lanepos[te[i]:]) <= LANECENTER)[0]
+            if len(end) > 0:
+                idx_end = te[i]-1+end[0]
+            else:
+                idx_end = te[i]
+            isLaneChange[idx_start:idx_end] = True
+            # print(le[i], te[i], idx_start, idx_end)
+
+    df.loc[isLaneChange, 'lanepos'] = np.nan
+
     # integrate ORD ratings from df_ord
-    dflist = ord_list(df, df_ord, filename)
+    dflist = ord_list(df, df_ord, filename, start_timestamp)
 
     if not dflist:
         print('no valid ORD segments have been found')
@@ -162,6 +189,9 @@ def process(fullfile, df_ord):
                                filename + '.csv')
         print("saving ORD segments to file " + outfile)
         df_trip.to_csv(outfile, index=None)
+
+    if MAKEPLOTS:
+        plt.close('all')
 
     return
 
@@ -199,7 +229,7 @@ def remove_turns(df):
     isturn = abs(Ay_low2) > 0.03
 
     if MAKEPLOTS:
-        plt.figure(1)
+        F = plt.figure(2)
         plt.plot(df.timestamp, df.acc_y)
         plt.hold(True)
         plt.plot(df.timestamp, Ay_high1, 'g')
@@ -215,8 +245,7 @@ def filter_segments(b, a, x):
     x = np.array(x)
     idx_valid_le, idx_valid_te = find_edges(~np.isnan(x))
     for i in range(len(idx_valid_le)):
-        x[idx_valid_le[i]:idx_valid_te[i]] = filter(b, a, x[idx_valid_le[i]:
-                                                    idx_valid_te[i]])
+        x[idx_valid_le[i]:idx_valid_te[i]] = filter(b, a, x[idx_valid_le[i]:idx_valid_te[i]])
     return x
 
 
@@ -232,11 +261,10 @@ def filter(b, a, x):
 def find_edges(x):
     ''' find the indices of all the leading and trailing edges of a bool
         array '''
+    x = np.array(x)
     shift = x
-    mask = np.ones(len(shift), dtype=bool)
-    mask[-1] = 0
-    shift = shift[mask]
-    shift = np.insert(shift, 0, shift[0])
+    shift = np.delete(shift, -1)
+    shift = np.insert(shift, 1, shift[0])
 
     le = np.logical_and(x == 1, shift == 0)
     te = np.logical_and(x == 0, shift == 1)
@@ -320,7 +348,7 @@ def process_radar(df, filename):
     xvel = df.loc[:, 'track1_xvel':'track8_xvel']
 
     if MAKEPLOTS:
-        F = plt.figure()
+        F = plt.figure(3)
         plt.subplot(221)
         plt.plot(df.timestamp, vhid)
         plt.title('vhid')
@@ -358,7 +386,7 @@ def process_radar(df, filename):
     return df
 
 
-def ord_list(df, df_ord, filename):
+def ord_list(df, df_ord, filename, start_timestamp):
     # file integer ID
     fileid = int(filename[8:])
 
@@ -369,7 +397,7 @@ def ord_list(df, df_ord, filename):
     dflist = []
     isfile = df_ord.loc[:, 'fileid'] == fileid
     df_ord_trip = df_ord.loc[isfile, :]
-    for row in df_ord_trip.iterrows():
+    for i, row in enumerate(df_ord_trip.iterrows()):
         start_time = int(row[1].start_time)
         start_time = start_time - (PREVIEW_SECONDS * FS_TIMESTAMP)
         end_time = int(row[1].end_time)
@@ -381,12 +409,23 @@ def ord_list(df, df_ord, filename):
                             df.timestamp <= end_time), :]
         if len(df_segment) == 0:
             continue
+        if np.all(pd.isnull(df_segment['lanepos'])):
+            continue
         df_segment.loc[:, 'timebin'] = timebin
         df_segment['eventid'] = eventid
         df_segment['ord'] = ordval
         df_segment['type'] = row[1].type
         df_segment['state'] = row[1].coded_state
+        df_segment['duration'] = float(start_time-start_timestamp) / float(FS_TIMESTAMP)
         dflist.append(df_segment)
+
+        if MAKEPLOTS:
+            F = plt.figure(4)
+            plt.plot(df_segment.lanepos)
+            plt.title('lanepos')
+            plt.show()
+            plt.savefig(os.path.join('laneposplots',
+                                     filename + '_' + str(i) + '.png'))
 
     return dflist
 
@@ -396,16 +435,16 @@ if __name__ == '__main__':
     ordfile = 'Final_ORDratings_2-14-17_wTrip+Timestamp.csv'
     df_ord = pd.read_csv(ordfile,
                          usecols=['File_ID-Trip_ID', 'ORD_EVENT_ID',
-                                  'ORD_Rating_Starttime',
-                                  'ORD_Rating_Endtime', 'AVEORDRATING',
-                                  'Event_Type', 'SampleSource'],
+                                  'ORD_Rating_Starttime', 'ORD_Rating_Endtime',
+                                  'AVEORDRATING', 'Event_Type',
+                                  'SampleSource'],
                          error_bad_lines=False)
     df_ord.columns = ['fileid', 'eventid', 'start_time', 'end_time', 'ord',
                       'type', 'coded_state']
 
     # process a file
     filename = os.path.join(os.getenv('SHRP2DataII'), 'TimeSeries_Files',
-                            'File_ID_25087961.csv')
+                            'File_ID_4945225.csv')
     process(filename, df_ord)
 
     # process a file
